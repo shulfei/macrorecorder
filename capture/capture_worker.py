@@ -15,12 +15,17 @@ from capture.event_store import (
     EventStore
 )
 
-from hooks.raw_events import (
-    RawMouseEvent
-)
-
 from capture.hotkey_filter import (
     ServiceHotkeyFilter
+)
+
+from capture.timestamp import (
+    HighPrecisionClock
+)
+
+from hooks.raw_events import (
+    RawMouseEvent,
+    RawKeyboardEvent
 )
 
 
@@ -52,11 +57,19 @@ class CaptureWorker:
 
         self._thread = None
 
+        self._started_ns = None
+
     def start(
         self
     ) -> None:
 
+        self._store.clear()
+
         self._delta.reset()
+
+        self._started_ns = (
+            HighPrecisionClock.now_ns()
+        )
 
         self._running.set()
 
@@ -88,9 +101,26 @@ class CaptureWorker:
 
     def snapshot(
         self
-    ):
+    ) -> list:
 
         return self._store.snapshot()
+
+    def duration_ns(
+        self
+    ) -> int:
+
+        if self._started_ns is None:
+
+            return 0
+
+        return (
+
+            HighPrecisionClock.now_ns()
+
+            -
+
+            self._started_ns
+        )
 
     def _worker(
         self
@@ -119,6 +149,18 @@ class CaptureWorker:
         event
     ) -> None:
 
+        #
+        # ignore playback generated events
+        #
+
+        if event.injected:
+
+            return
+
+        #
+        # mouse movement
+        #
+
         if isinstance(
             event,
             RawMouseEvent
@@ -128,6 +170,7 @@ class CaptureWorker:
                 self._delta.capture(
 
                     event.x,
+
                     event.y
                 )
             )
@@ -140,7 +183,28 @@ class CaptureWorker:
 
             return
 
-        # keyboard events
-        # click events
-        # pause timing
-        # added next stage
+        #
+        # keyboard
+        #
+
+        if isinstance(
+            event,
+            RawKeyboardEvent
+        ):
+
+            allowed = (
+                self._filter.process(
+
+                    event.vk_code,
+
+                    event.pressed
+                )
+            )
+
+            if not allowed:
+
+                return
+
+            #
+            # keyboard event storage later
+            #

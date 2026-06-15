@@ -7,12 +7,20 @@ from playback.playback_state import (
     PlaybackState
 )
 
-from playback.delta_player import (
-    DeltaPlayer
+from playback.high_precision_timer import (
+    HighPrecisionTimer
 )
 
-from playback.repeat_loop import (
-    RepeatLoop
+from system.send_input import (
+    SendInputAPI
+)
+
+from system.window_tracker import (
+    WindowTracker
+)
+
+from core.exceptions import (
+    PlaybackError
 )
 
 
@@ -28,21 +36,52 @@ class PlaybackWorker:
 
         self._thread = None
 
+        self._packets = []
+
+        self._repeat = False
+
+        self._expected_window = None
+
+    #
+    # external api
+    #
+
     def start(
         self,
+
         packets: list,
-        repeat: bool
+
+        repeat: bool,
+
+        expected_window: str
     ) -> None:
+
+        if self.running():
+
+            raise PlaybackError(
+                "Playback already running"
+            )
+
+        self._packets = packets
+
+        self._repeat = repeat
+
+        self._expected_window = (
+            expected_window
+        )
+
+        #
+        # reset state
+        #
+
+        self._state = (
+            PlaybackState()
+        )
 
         self._thread = (
             threading.Thread(
 
                 target=self._worker,
-
-                args=(
-                    packets,
-                    repeat
-                ),
 
                 daemon=True
             )
@@ -62,32 +101,156 @@ class PlaybackWorker:
 
         self._state.pause_toggle()
 
-    def _worker(
-        self,
-        packets: list,
-        repeat: bool
-    ) -> None:
+    def running(
+        self
+    ) -> bool:
 
-        repeater = (
-            RepeatLoop(
-                repeat
-            )
+        if self._thread is None:
+
+            return False
+
+        return (
+            self._thread.is_alive()
         )
+
+    #
+    # main worker
+    #
+
+    def _worker(
+        self
+    ) -> None:
 
         while True:
 
+            #
+            # immediate stop
+            #
+
             if self._state.stopped():
+
                 return
 
-            while self._state.paused():
+            #
+            # active window check
+            #
 
-                time.sleep(
-                    0.01
-                )
+            if not self._validate_window():
 
-            DeltaPlayer.replay(
-                packets
+                self.stop()
+
+                return
+
+            #
+            # replay one sequence
+            #
+
+            self._play_sequence()
+
+            #
+            # no repeat
+            #
+
+            if not self._repeat:
+
+                break
+
+        self.stop()
+
+    #
+    # one replay cycle
+    #
+
+    def _play_sequence(
+        self
+    ) -> None:
+
+        for packet in self._packets:
+
+            #
+            # stop check
+            #
+
+            if self._state.stopped():
+
+                return
+
+            #
+            # pause check
+            #
+
+            self._pause_wait()
+
+            #
+            # window check
+            #
+
+            if not self._validate_window():
+
+                self.stop()
+
+                return
+
+            #
+            # replay packet
+            #
+
+            self._send_packet(
+                packet
             )
 
-            if not repeater.repeat():
-                break
+    #
+    # packet replay
+    #
+
+    def _send_packet(
+        self,
+        packet
+    ) -> None:
+
+        SendInputAPI.move_relative(
+
+            packet.dx,
+
+            packet.dy
+        )
+
+        HighPrecisionTimer.wait_ns(
+
+            packet.dt_ns
+        )
+
+    #
+    # pause logic
+    #
+
+    def _pause_wait(
+        self
+    ) -> None:
+
+        while self._state.paused():
+
+            if self._state.stopped():
+
+                return
+
+            time.sleep(
+                0.005
+            )
+
+    #
+    # target window validation
+    #
+
+    def _validate_window(
+        self
+    ) -> bool:
+
+        if not self._expected_window:
+
+            return True
+
+        return WindowTracker.matches(
+
+            self._expected_window
+        )

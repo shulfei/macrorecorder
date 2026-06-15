@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+from serialization.preset_decoder import (
+    PresetDecoder
+)
+
+from system.window_tracker import (
+    WindowTracker
+)
+
 import threading
+import time
+from pathlib import Path
 
 from runtime.command_bus import (
     CommandBus
@@ -16,6 +26,14 @@ from capture.capture_worker import (
 
 from playback.playback_worker import (
     PlaybackWorker
+)
+
+from serialization.preset_builder import (
+    PresetBuilder
+)
+
+from serialization.preset_encoder import (
+    PresetEncoder
 )
 
 
@@ -44,19 +62,41 @@ class RuntimeController:
             threading.Event()
         )
 
+        self._thread = None
+
+    #
+    # external api
+    #
+
     def start(
         self
     ) -> None:
 
         self.running.set()
 
-        threading.Thread(
+        self._thread = (
+            threading.Thread(
 
-            target=self._worker,
+                target=self._worker,
 
-            daemon=True
+                daemon=True
+            )
+        )
 
-        ).start()
+        self._thread.start()
+
+    def publish(
+        self,
+        command
+    ) -> None:
+
+        self.bus.send(
+            command
+        )
+
+    #
+    # internal loop
+    #
 
     def _worker(
         self
@@ -69,11 +109,20 @@ class RuntimeController:
             )
 
             if cmd is None:
+
+                time.sleep(
+                    0.001
+                )
+
                 continue
 
             self._process(
                 cmd
             )
+
+    #
+    # command processor
+    #
 
     def _process(
         self,
@@ -83,18 +132,19 @@ class RuntimeController:
         if cmd.command == \
            CommandType.START_RECORD:
 
-            self.capture.start()
-
-            self.logger.info(
-                "capture started"
-            )
+            self._start_record()
 
         elif cmd.command == \
-             CommandType.STOP:
+             CommandType.STOP_RECORD:
 
-            self.capture.stop()
+            self._stop_record()
 
-            self.playback.stop()
+        elif cmd.command == \
+             CommandType.START_PLAYBACK:
+
+            self._start_playback(
+                cmd.payload
+            )
 
         elif cmd.command == \
              CommandType.PAUSE_RESUME:
@@ -114,3 +164,137 @@ class RuntimeController:
             self.capture.push(
                 cmd.payload
             )
+
+        elif cmd.command == \
+             CommandType.SHUTDOWN:
+
+            self._shutdown()
+
+    #
+    # record start
+    #
+
+    def _start_record(
+        self
+    ) -> None:
+
+        self.capture.start()
+
+        self.logger.info(
+            "Recording started"
+        )
+
+    #
+    # record stop
+    #
+
+    def _stop_record(
+        self
+    ) -> None:
+
+        self.capture.stop()
+
+        packets = (
+            self.capture.snapshot()
+        )
+
+        duration = (
+            self.capture.duration_ns()
+        )
+
+        preset = PresetBuilder.build(
+
+            packets=packets,
+
+            duration_ns=duration,
+
+            monitor_count=1,
+
+            window_title=(
+
+                WindowTracker.active_title()
+            ),
+
+            repeatable=False
+        )
+
+        filename = (
+
+            f"preset_"
+
+            f"{time.time_ns()}.json"
+        )
+
+        PresetEncoder().save(
+
+            preset,
+
+            Path(filename)
+        )
+
+        self.logger.info(
+
+            f"Saved {filename}"
+        )
+
+    #
+    # playback
+    #
+
+    def _start_playback(
+            self,
+            playback_command
+    ) -> None:
+
+        #
+        # load preset
+        #
+
+        preset = (
+
+            PresetDecoder()
+
+            .load(
+
+                playback_command.preset_path
+            )
+        )
+
+        #
+        # start playback
+        #
+
+        self.playback.start(
+
+            packets=
+            preset.packets,
+
+            repeat=
+            playback_command.repeat,
+
+            expected_window=
+            preset.window_title
+        )
+
+        self.logger.info(
+
+            "Playback started"
+        )
+
+    #
+    # shutdown
+    #
+
+    def _shutdown(
+        self
+    ) -> None:
+
+        self.capture.stop()
+
+        self.playback.stop()
+
+        self.running.clear()
+
+        self.logger.info(
+            "Controller shutdown"
+        )

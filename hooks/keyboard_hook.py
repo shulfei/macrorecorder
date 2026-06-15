@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+
 from ctypes import wintypes
 
 from hooks.raw_events import (
@@ -11,34 +12,54 @@ from hooks.hook_queue import (
     HookQueue
 )
 
+from core.exceptions import (
+    HookInstallError
+)
+
 
 user32 = ctypes.windll.user32
+
+kernel32 = ctypes.windll.kernel32
+
 
 WH_KEYBOARD_LL = 13
 
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 
+LLKHF_INJECTED = 0x10
+
 
 class KBDLLHOOKSTRUCT(
     ctypes.Structure
 ):
+
     _fields_ = [
 
-        ("vkCode",
-         wintypes.DWORD),
+        (
+            "vkCode",
+            wintypes.DWORD
+        ),
 
-        ("scanCode",
-         wintypes.DWORD),
+        (
+            "scanCode",
+            wintypes.DWORD
+        ),
 
-        ("flags",
-         wintypes.DWORD),
+        (
+            "flags",
+            wintypes.DWORD
+        ),
 
-        ("time",
-         wintypes.DWORD),
+        (
+            "time",
+            wintypes.DWORD
+        ),
 
-        ("dwExtraInfo",
-         ctypes.c_ulonglong)
+        (
+            "dwExtraInfo",
+            ctypes.c_ulonglong
+        )
     ]
 
 
@@ -65,26 +86,23 @@ class KeyboardHook:
 
         self._handle = None
 
-        self._proc = None
+        self._callback = None
 
     def install(
         self
     ) -> None:
 
-        kernel32 = (
-            ctypes.windll.kernel32
-        )
-
-        self._proc = HOOKPROC(
+        self._callback = HOOKPROC(
             self._hook_proc
         )
 
         self._handle = (
+
             user32.SetWindowsHookExW(
 
                 WH_KEYBOARD_LL,
 
-                self._proc,
+                self._callback,
 
                 kernel32.GetModuleHandleW(
                     None
@@ -94,16 +112,46 @@ class KeyboardHook:
             )
         )
 
+        if not self._handle:
+
+            raise HookInstallError(
+                "Keyboard hook install failed"
+            )
+
+    def uninstall(
+        self
+    ) -> None:
+
+        if self._handle:
+
+            user32.UnhookWindowsHookEx(
+                self._handle
+            )
+
+            self._handle = None
+
+    def alive(
+        self
+    ) -> bool:
+
+        return (
+            self._handle
+            is not None
+        )
+
     def _hook_proc(
         self,
-        n_code,
-        w_param,
-        l_param
-    ):
+
+        n_code: int,
+
+        w_param: int,
+
+        l_param: int
+    ) -> int:
 
         if n_code >= 0:
 
-            kb = ctypes.cast(
+            data = ctypes.cast(
 
                 l_param,
 
@@ -113,21 +161,27 @@ class KeyboardHook:
 
             ).contents
 
-            event = (
-                RawKeyboardEvent(
+            event = RawKeyboardEvent(
 
-                    vk_code=
-                        kb.vkCode,
+                vk_code=
+                    data.vkCode,
 
-                    scan_code=
-                        kb.scanCode,
+                scan_code=
+                    data.scanCode,
 
-                    pressed=(
-                        w_param ==
-                        WM_KEYDOWN
-                    ),
+                pressed=(
 
-                    injected=False
+                    w_param == WM_KEYDOWN
+
+                ),
+
+                injected=bool(
+
+                    data.flags
+
+                    &
+
+                    LLKHF_INJECTED
                 )
             )
 

@@ -1,9 +1,3 @@
-from __future__ import annotations
-
-
-SCHEMA_VERSION = 2
-
-
 REQUIRED = [
 
     "schema_version",
@@ -18,5 +12,21 @@ REQUIRED = [
 
     "dpi_scale",
 
+    "metadata",
+
     "packets"
+]
+
+
+METADATA_REQUIRED = [
+
+    "machine_name",
+
+    "os_version",
+
+    "python_version",
+
+    "monitor_count",
+
+    "record_duration_ns"
 ]

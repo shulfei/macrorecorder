@@ -16,6 +16,22 @@ class MousePacket:
 @dataclass(
     slots=True
 )
+class PresetMetadata:
+
+    machine_name: str
+
+    os_version: str
+
+    python_version: str
+
+    monitor_count: int
+
+    record_duration_ns: int
+
+
+@dataclass(
+    slots=True
+)
 class PresetV2:
 
     schema_version: int
@@ -31,5 +47,7 @@ class PresetV2:
     dpi_scale: float
 
     repeatable: bool
+
+    metadata: PresetMetadata
 
     packets: list[MousePacket]
