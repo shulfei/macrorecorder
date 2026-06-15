@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Виртуальные окружения
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Локальные файлы конфигурации
+.env
+.venv
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Настройки среды разработки (IDE)
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Распространение (пакеты)
+build/
+dist/
+*.egg-info/
+.eggs/
