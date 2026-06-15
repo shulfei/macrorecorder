@@ -4,7 +4,7 @@ name = "macro_recorder_a_plus"
 
 version = "5.0.0"
 
-requires-python = "==3.14.4"
+requires-python = "==3.14.6"
 
 
 [tool.ruff]

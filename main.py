@@ -1,19 +1,27 @@
 from __future__ import annotations
 
-import sys
 import signal
+import sys
 import threading
+
 
 from core.cli import CLIParser
 from core.singleton import SingleInstance
 from core.config import RuntimeConfig
 from core.file_logger import FileLogger
+
 from core.exceptions import (
     MacroRecorderError
 )
 
 from runtime.controller import (
     RuntimeController
+)
+
+from runtime.commands import (
+    RuntimeCommand,
+    CommandType,
+    PlaybackCommand
 )
 
 from hooks.hook_queue import (
@@ -40,16 +48,6 @@ from hooks.hook_watchdog import (
     HookWatchdog
 )
 
-from runtime.commands import (
-    RuntimeCommand,
-    CommandType,
-    PlaybackCommand
-)
-
-from serialization.preset_decoder import (
-    PresetDecoder
-)
-
 
 class Application:
 
@@ -57,12 +55,18 @@ class Application:
         self
     ) -> None:
 
+        self._shutdown_lock = (
+            threading.Lock()
+        )
+
+        self._shutdown_started = False
+
         self.shutdown_event = (
             threading.Event()
         )
 
         #
-        # CLI
+        # cli
         #
 
         self.cli = (
@@ -75,7 +79,6 @@ class Application:
 
         self.instance = (
             SingleInstance(
-
                 RuntimeConfig().mutex_name
             )
         )
@@ -86,23 +89,32 @@ class Application:
         # logger
         #
 
-        logfile = None
-
         if self.cli.file:
 
-            logfile = (
-                self.cli.file
+            self.logger = (
+                FileLogger.build(
+                    self.cli.file
+                )
             )
 
-        self.logger = (
-            FileLogger.build(
+        else:
 
-                logfile or "macro.log"
+            self.logger = (
+                FileLogger.console()
             )
-        )
 
         #
-        # runtime controller
+        # debug mode
+        #
+
+        if self.cli.debug:
+
+            self.logger.info(
+                "Debug mode enabled"
+            )
+
+        #
+        # controller
         #
 
         self.controller = (
@@ -112,7 +124,7 @@ class Application:
         )
 
         #
-        # hook subsystem
+        # hooks subsystem
         #
 
         self.hook_queue = (
@@ -157,13 +169,27 @@ class Application:
             )
         )
 
+        #
+        # signals
+        #
+
         signal.signal(
             signal.SIGINT,
             self._signal_handler
         )
 
+        if hasattr(
+            signal,
+            "SIGTERM"
+        ):
+
+            signal.signal(
+                signal.SIGTERM,
+                self._signal_handler
+            )
+
     #
-    # startup
+    # start
     #
 
     def start(
@@ -171,7 +197,7 @@ class Application:
     ) -> None:
 
         self.logger.info(
-            "Starting application"
+            "Application starting"
         )
 
         #
@@ -181,22 +207,22 @@ class Application:
         self.controller.start()
 
         #
-        # dispatcher thread
+        # start dispatcher
         #
 
         self.dispatcher.start()
 
         #
-        # hook watchdog
-        #
-
-        self.watchdog.start()
-
-        #
-        # windows hooks
+        # install hooks thread
         #
 
         self.hook_thread.start()
+
+        #
+        # watchdog AFTER hook install thread
+        #
+
+        self.watchdog.start()
 
         #
         # playback mode
@@ -207,7 +233,7 @@ class Application:
             self._start_playback()
 
         #
-        # main loop
+        # wait forever
         #
 
         self.shutdown_event.wait()
@@ -234,16 +260,6 @@ class Application:
         self
     ) -> None:
 
-        decoder = (
-            PresetDecoder()
-        )
-
-        preset = (
-            decoder.load(
-                self.cli.preset
-            )
-        )
-
         command = RuntimeCommand(
 
             CommandType.START_PLAYBACK,
@@ -263,11 +279,11 @@ class Application:
         )
 
         self.logger.info(
-            "Playback mode"
+            "Playback mode enabled"
         )
 
     #
-    # ctrl+c
+    # signal
     #
 
     def _signal_handler(
@@ -285,40 +301,121 @@ class Application:
         self
     ) -> None:
 
+        #
+        # prevent double shutdown
+        #
+
+        with self._shutdown_lock:
+
+            if self._shutdown_started:
+
+                return
+
+            self._shutdown_started = True
+
         self.logger.info(
             "Shutdown initiated"
         )
 
         #
+        # stop watchdog
+        #
+
+        try:
+
+            self.watchdog.stop()
+
+        except Exception:
+            pass
+
+        #
         # stop dispatcher
         #
 
-        self.dispatcher.stop()
+        try:
+
+            self.dispatcher.stop()
+
+        except Exception:
+            pass
 
         #
-        # unhook
+        # uninstall hooks
         #
 
-        self.keyboard_hook.uninstall()
+        try:
 
-        self.mouse_hook.uninstall()
+            self.keyboard_hook.uninstall()
+
+        except Exception:
+            pass
+
+        try:
+
+            self.mouse_hook.uninstall()
+
+        except Exception:
+            pass
 
         #
-        # stop controller
+        # stop hook thread
+        # if implemented
         #
 
-        self.controller.publish(
+        if hasattr(
+            self.hook_thread,
+            "stop"
+        ):
 
-            RuntimeCommand(
-                CommandType.SHUTDOWN
+            try:
+
+                self.hook_thread.stop()
+
+            except Exception:
+                pass
+
+        #
+        # shutdown controller
+        #
+
+        try:
+
+            self.controller.publish(
+
+                RuntimeCommand(
+                    CommandType.SHUTDOWN
+                )
             )
-        )
+
+        except Exception:
+            pass
+
+        #
+        # wait controller
+        #
+
+        if hasattr(
+            self.controller,
+            "join"
+        ):
+
+            try:
+
+                self.controller.join()
+
+            except Exception:
+                pass
 
         #
         # release mutex
         #
 
-        self.instance.release()
+        try:
+
+            self.instance.release()
+
+        except Exception:
+            pass
 
         self.logger.info(
             "Shutdown complete"
@@ -328,27 +425,29 @@ class Application:
 def main() -> int:
 
     #
-    # python version strict
+    # strict python version
     #
 
-    version = sys.version_info
+    version = (
+        sys.version_info
+    )
 
     if not (
 
         version.major == 3
-
         and
-
         version.minor == 14
+        and
+        version.micro == 6
     ):
 
         print(
-
-            "Requires Python 3.14.4"
-
+            "Requires Python 3.14.6 exactly"
         )
 
         return 1
+
+    app = None
 
     try:
 
@@ -377,6 +476,21 @@ def main() -> int:
         )
 
         return 1
+
+    finally:
+
+        #
+        # emergency cleanup
+        #
+
+        if app is not None:
+
+            try:
+
+                app.shutdown()
+
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

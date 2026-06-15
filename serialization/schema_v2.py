@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+
+SCHEMA_VERSION = 2
+
+
 REQUIRED = [
 
     "schema_version",
@@ -11,6 +17,8 @@ REQUIRED = [
     "screen_height",
 
     "dpi_scale",
+
+    "repeatable",
 
     "metadata",
 
@@ -29,4 +37,14 @@ METADATA_REQUIRED = [
     "monitor_count",
 
     "record_duration_ns"
+]
+
+
+PACKET_REQUIRED = [
+
+    "dx",
+
+    "dy",
+
+    "dt_ns"
 ]

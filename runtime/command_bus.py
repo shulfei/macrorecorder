@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import queue
-
-from runtime.commands import (
-    RuntimeCommand
-)
+from queue import SimpleQueue
 
 
 class CommandBus:
@@ -14,14 +10,12 @@ class CommandBus:
     ) -> None:
 
         self._queue = (
-            queue.Queue[
-                RuntimeCommand
-            ]()
+            SimpleQueue()
         )
 
-    def publish(
+    def send(
         self,
-        command: RuntimeCommand
+        command
     ) -> None:
 
         self._queue.put(
@@ -29,16 +23,11 @@ class CommandBus:
         )
 
     def receive(
-        self,
-        timeout: float = 0.05
-    ) -> RuntimeCommand | None:
+        self
+    ):
 
-        try:
-
-            return self._queue.get(
-                timeout=timeout
-            )
-
-        except queue.Empty:
+        if self._queue.empty():
 
             return None
+
+        return self._queue.get()

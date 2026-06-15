@@ -18,22 +18,27 @@ class HookThread:
             installer
         )
 
-        self._loop = (
-            MessageLoop()
-        )
+        self._thread = None
 
     def start(
         self
     ) -> None:
 
-        self._loop.start(
+        self._thread = (
+            threading.Thread(
 
-            install_hooks=
-                self._installer
+                target=self._worker,
+
+                daemon=True
+            )
         )
 
-    def stop(
+        self._thread.start()
+
+    def _worker(
         self
     ) -> None:
 
-        self._loop.stop()
+        self._installer()
+
+        MessageLoop.run()

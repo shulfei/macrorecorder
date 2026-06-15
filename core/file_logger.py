@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from logging.handlers import RotatingFileHandler
 
 
 class FileLogger:
@@ -15,17 +14,33 @@ class FileLogger:
             "macro"
         )
 
-        handler = (
-            RotatingFileHandler(
-
-                filename,
-
-                maxBytes=
-                    10_000_000,
-
-                backupCount=5
-            )
+        logger.setLevel(
+            logging.INFO
         )
+
+        handler = logging.FileHandler(
+            filename,
+            encoding="utf-8"
+        )
+
+        logger.addHandler(
+            handler
+        )
+
+        return logger
+
+    @staticmethod
+    def console():
+
+        logger = logging.getLogger(
+            "macro"
+        )
+
+        logger.setLevel(
+            logging.INFO
+        )
+
+        handler = logging.StreamHandler()
 
         logger.addHandler(
             handler

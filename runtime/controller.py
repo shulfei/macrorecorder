@@ -266,14 +266,11 @@ class RuntimeController:
 
         self.playback.start(
 
-            packets=
-            preset.packets,
+            packets=preset.packets,
 
-            repeat=
-            playback_command.repeat,
+            repeat=playback_command.repeat,
 
-            expected_window=
-            preset.window_title
+            expected_window=preset.window_title
         )
 
         self.logger.info(

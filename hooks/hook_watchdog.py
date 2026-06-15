@@ -34,18 +34,47 @@ class HookWatchdog:
 
         ).start()
 
+    def stop(
+        self
+    ) -> None:
+
+        self.running.clear()
+
     def _worker(
         self
     ) -> None:
 
         while self.running.is_set():
 
-            if not self.keyboard.alive():
+            #
+            # monitor only
+            #
 
-                self.keyboard.install()
+            keyboard_alive = (
+                self.keyboard.alive()
+            )
 
-            if not self.mouse.alive():
+            mouse_alive = (
+                self.mouse.alive()
+            )
 
-                self.mouse.install()
+            #
+            # later:
+            # logging / diagnostics
+            #
 
-            time.sleep(1)
+            if not keyboard_alive:
+
+                print(
+                    "Warning: keyboard hook inactive"
+                )
+
+            if not mouse_alive:
+
+                print(
+                    "Warning: mouse hook inactive"
+                )
+
+            time.sleep(
+                1
+            )

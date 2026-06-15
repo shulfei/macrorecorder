@@ -13,7 +13,7 @@ class CommandType(
     )
 
     STOP = (
-        "stop"
+        "stop_record"
     )
 
     PAUSE_RESUME = (

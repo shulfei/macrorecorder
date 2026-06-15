@@ -64,13 +64,9 @@ class KBDLLHOOKSTRUCT(
 
 
 HOOKPROC = ctypes.WINFUNCTYPE(
-
-    ctypes.c_long,
-
+    wintypes.LPARAM,
     ctypes.c_int,
-
     wintypes.WPARAM,
-
     wintypes.LPARAM
 )
 
